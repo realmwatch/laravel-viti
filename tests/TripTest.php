@@ -84,3 +84,25 @@ it('never throws when delivery fails, and logs the trip instead', function () {
     array_map('unlink', glob($dir.'/*'));
     rmdir($dir);
 });
+
+it('writes each trip as one line the collector accepts, never over 64 KiB', function () {
+    $dir = sys_get_temp_dir().'/viti-'.bin2hex(random_bytes(4));
+    mkdir($dir);
+    Viti::reportUsing(new SpoolTransport($dir));
+    // Quotes escape to two bytes each: this context alone would be ~400 KB.
+    $huge = array_fill_keys(array_map(fn ($i) => "key_{$i}", range(1, 20)), array_fill(0, 50, str_repeat('"', 200)));
+    Route::get('/big', fn () => Viti::trip('big', Severity::High, context: $huge));
+
+    $this->get('/big');
+
+    [$file] = glob($dir.'/*.json');
+    $json = file_get_contents($file);
+    $trip = json_decode($json, true);
+    expect(strlen($json))->toBeLessThanOrEqual(65536)
+        ->and($json)->toStartWith('{"schema":"viti.trip.v1",')
+        ->and($json)->not->toContain("\n")
+        ->and(basename($file))->toMatch('/^[0-9A-Z]{26}\.json$/')
+        ->and($trip['context'])->toBe(['context_dropped' => true]);
+    unlink($file);
+    rmdir($dir);
+});
