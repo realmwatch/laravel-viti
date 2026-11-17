@@ -12,8 +12,8 @@ use Realmwatch\Viti\Viti;
  * addresses across the fleet.
  *
  * Some never reach Laravel on a stock nginx: dotfiles are denied and a
- * missing .php file is answered by PHP-FPM. viti:install (phase 2) prints
- * the nginx lines that route them to the app.
+ * missing .php file is answered by PHP-FPM. viti:install prints the nginx
+ * lines that route them to the app.
  */
 final class DecoyRoutes implements Tripwire
 {

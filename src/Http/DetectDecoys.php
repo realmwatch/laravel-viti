@@ -38,7 +38,7 @@ final class DetectDecoys
             if ($decoy === null) {
                 return $response;
             }
-            $this->viti->trip($decoy->tripwire, $decoy->severity, $decoy->token());
+            $this->viti->trip($decoy->tripwire, $decoy->severity, $decoy->token(), $decoy->context);
             if ($decoy->respond !== null) {
                 $response = ($decoy->respond)($request, $response);
                 $response->headers->set('Cache-Control', 'no-store, private');
