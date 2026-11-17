@@ -15,6 +15,12 @@ final class Payload
 {
     public const SCHEMA = 'viti.trip.v1';
 
+    /** The collector deletes a spool file larger than this. */
+    public const MAX_BYTES = 65536;
+
+    /** Single-line JSON, schema first, as the collector expects it. Bad UTF-8 is replaced, never fatal. */
+    public const JSON_FLAGS = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR;
+
     /**
      * The request headers a report may carry. Not every cf-* header:
      * Cf-Access-Jwt-Assertion is a credential.
@@ -39,7 +45,7 @@ final class Payload
         string $root,
         string $version,
     ): array {
-        return [
+        $payload = [
             'schema' => self::SCHEMA,
             'id' => (string) Str::ulid(),
             'site' => self::clip($site, 255),
@@ -56,6 +62,37 @@ final class Payload
             'context' => self::context($context),
             'package_version' => self::clip($version, 64),
         ];
+
+        return self::fit($payload);
+    }
+
+    /** @param  array<string, mixed>  $payload */
+    public static function encode(array $payload): string
+    {
+        return json_encode($payload, self::JSON_FLAGS);
+    }
+
+    /**
+     * Keeps the encoded payload under MAX_BYTES. Only the context can grow
+     * that big (escaping can make a 200-character string six times longer),
+     * so it goes first, replaced by a marker. Every other field is clipped
+     * well under the limit, but the request detail goes too if it's needed.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private static function fit(array $payload): array
+    {
+        if (strlen(self::encode($payload)) <= self::MAX_BYTES) {
+            return $payload;
+        }
+        $payload['context'] = (object) ['context_dropped' => true];
+        if ($payload['request'] !== null && strlen(self::encode($payload)) > self::MAX_BYTES) {
+            $payload['request']['headers'] = (object) [];
+            $payload['request']['query_keys'] = [];
+        }
+
+        return $payload;
     }
 
     /** @return array<string, mixed> */

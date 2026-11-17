@@ -3,13 +3,15 @@
 namespace Realmwatch\Viti\Transports;
 
 use Realmwatch\Viti\Contracts\Transport;
+use Realmwatch\Viti\Reporting\Payload;
 use RuntimeException;
 
 /**
  * Writes each trip to its own file in the spool directory, for the Heimdall
  * collector on this server to ship. The file is written under a dot name
  * and renamed into place, so the collector never reads half a report.
- * See docs/heimdall-contract.md.
+ * Payload keeps each file under the collector's 64 KiB limit. See
+ * docs/heimdall-contract.md.
  */
 final class SpoolTransport implements Transport
 {
@@ -17,7 +19,8 @@ final class SpoolTransport implements Transport
 
     public function send(array $payload): void
     {
-        $json = json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        // One line, no trailing newline, schema first: the collector deletes anything else.
+        $json = Payload::encode($payload);
         $id = (string) $payload['id'];
         $tmp = $this->path.'/.'.$id.'.tmp';
 

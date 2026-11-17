@@ -18,9 +18,19 @@ php artisan viti:list      # what's armed
 - the robots.txt lines for the breadcrumb path;
 - an nginx block that goes above Forge's `location ~ \.php$` block and its dotfile deny rule. Without it nginx denies `/.env` and `/.git/*`, and PHP-FPM answers `/wp-login.php` with "File not found", so those decoys never reach Laravel.
 
-Trips go to a spool directory that the Heimdall collector on the server ships (see [docs/heimdall-contract.md](docs/heimdall-contract.md)). Without a collector, set `VITI_TRANSPORT=log`.
-
 If you published the config before a new tripwire was added, add its entry from the package's `config/viti.php`: a published `tripwires` list replaces the package's.
+
+## Heimdall
+
+Trips go to a spool directory that the Heimdall collector on the server ships to the hub within seconds (see [docs/heimdall-contract.md](docs/heimdall-contract.md)). Tripwires are opt-in per server:
+
+```sh
+sudo heimdall-collect upgrade --tripwires    # creates /var/lib/heimdall-viti
+php artisan viti:test                        # a low "Tripwire test tripped" anomaly, within seconds
+sudo -u heimdall heimdall-collect --trips    # what's waiting to ship
+```
+
+Without a collector, set `VITI_TRANSPORT=log`.
 
 ## Built-in tripwires
 

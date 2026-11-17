@@ -6,30 +6,40 @@ Viti never talks to the network. It writes each trip to a local spool directory,
 - a trip costs the request one cache write and one small file write, with no queue;
 - the hub knows which server a trip came from, because the collector authenticated it.
 
-**The Heimdall side isn't built yet.** This file is the contract both sides build to.
+This file is the contract from Viti's side. Heimdall's side (collector 0.5.34 and later) is in [Heimdall's tripwire docs](https://github.com/realmwatch/heimdall/blob/main/docs/tripwires.md).
 
 ## The spool directory
 
-`/var/lib/heimdall-viti` (`VITI_SPOOL` overrides it). The Heimdall installer creates it:
+`/var/lib/heimdall-viti` (`VITI_SPOOL` overrides it). Tripwires are opt-in per server, and this creates it:
 
 ```sh
-install -d -m 1733 -o heimdall -g heimdall /var/lib/heimdall-viti
+sudo heimdall-collect upgrade --tripwires
 ```
 
 Mode `1733` lets any local user (each site's PHP-FPM user) create files without being able to list or read anyone else's. The collector's user owns the directory, so it can list, read and delete every file in it.
 
 ## Files
 
-- One trip per file, named `<id>.json`, where `<id>` is the trip's ULID.
-- Viti writes `.<id>.tmp` first, sets mode `0644`, then renames it. **The collector ignores names that start with a dot.**
-- Each file is a single JSON object (below), under 8 KB in practice. The collector should skip any file over 64 KB, and anything that doesn't parse.
+- One trip per file, named `<id>.json`, where `<id>` is the trip's 26-character ULID.
+- Viti writes `.<id>.tmp` first, sets mode `0644`, then renames it. The collector skips dot files, and deletes any older than 60 minutes.
+- Each file is a regular file (not a symlink) holding one line, with no trailing newline: a single JSON object (below) that starts with `{"schema":"viti.trip.v1",`.
+- Each file is at most 64 KiB. A trip is usually under 2 KB. If one would be larger, Viti replaces its context with `{"context_dropped": true}`, and as a last resort empties the request headers and query keys.
+
+The collector deletes any file that breaks these rules.
 
 ## Shipping (collector)
 
-- Ship the files with each push, oldest first. Cap each push at about 200 trips or 256 KB, and leave the rest for the next push.
-- Delete a file only after the hub accepts it (2xx). The hub dedupes on `id`, so a resend is harmless.
-- If more than 5,000 files pile up (hub down for days), delete the oldest ones, so a scanner can't fill the disk.
-- **Latency:** an hourly push is too slow for a critical trip. Suggested: a systemd path unit (`DirectoryNotEmpty=/var/lib/heimdall-viti`) that starts a light trips-only push, rate-limited to about one a minute. Without systemd, the hourly push.
+- A systemd path unit sees a new file. About five seconds later the collector sends every waiting trip, each in its own request. These sends don't count toward the 12-an-hour event-report cap. Anything left over goes with the next hourly report.
+- A file is deleted only after the hub stores it (HTTP 200). An older hub answers 415, and the files wait.
+- Past 5,000 waiting files (hub down for days), the collector deletes the oldest, so a scanner can't fill the disk.
+- `sudo -u heimdall heimdall-collect --trips` shows what's waiting.
+
+## What the hub accepts
+
+- It validates `schema`, `id` (a ULID), `tripwire` (snake_case, at most 64 characters), `severity` and `occurred_at` (RFC 3339). It drops trips older than 30 days or more than 15 minutes in the future.
+- It keeps only the allowlisted headers, query-key names, scalar context (strings clipped at 200 characters, lists capped at 50) and the user ID.
+- Stored detail is capped at 32 KiB. Past that, the context is dropped.
+- It dedupes on `id`, keeps trips for 90 days, and accepts up to 720 trip requests per host per hour.
 
 ## Payload: `viti.trip.v1`
 
@@ -65,7 +75,7 @@ Mode `1733` lets any local user (each site's PHP-FPM user) create files without 
 |---|---|
 | `site` | `VITI_SITE`, or `APP_URL`'s host. A label, not proof: the hub trusts only the server the collector authenticated. |
 | `root` | `base_path()`. The hub matches it to a site it inventories. With release directories it's the release path, so match on the site's root as a prefix. |
-| `tripwire` | The tripwire's name, built in (`decoy_routes`, `bait_files`, `breadcrumbs`) or the app's own. `test` comes from `viti:test`. |
+| `tripwire` | snake_case, at most 64 characters, or the hub rejects the trip. The tripwire's name, built in (`decoy_routes`, `bait_files`, `breadcrumbs`) or the app's own. `test` comes from `viti:test`. |
 | `token` | Which trap in that tripwire: a decoy path, a bait name. Group alerts by `tripwire` + `token`. |
 | `severity` | `noise`, `low`, `high` or `critical`. Any trip by a signed-in user is `critical`. |
 | `request` | `null` when the trip didn't come from a web request (a queue job, an Artisan command). |
@@ -82,6 +92,8 @@ A repeat of the same `tripwire` + `token` from the same IP within 10 minutes isn
 
 ## Severity routing (hub)
 
-- `noise`: a daily rollup per site, correlated across the fleet by IP.
-- `low`, `high`: an alert.
-- `critical`: page someone now.
+- `noise`: stored only, with no UI yet.
+- `low`: a low anomaly, with no alert.
+- `high` and `critical`: a high anomaly, alerted at once.
+
+There's at most one open anomaly per `tripwire`, `token`, IP and day.
