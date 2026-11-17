@@ -1,5 +1,7 @@
 <?php
 
+use Realmwatch\Viti\Tripwires\BaitFiles;
+use Realmwatch\Viti\Tripwires\Breadcrumbs;
 use Realmwatch\Viti\Tripwires\DecoyRoutes;
 
 return [
@@ -39,6 +41,30 @@ return [
             'class' => DecoyRoutes::class,
             'enabled' => true,
             'paths' => DecoyRoutes::DEFAULT_PATHS,
+        ],
+
+        // /.env and /backup.sql serve a fake .env and mysqldump, unique to
+        // this site and derived from `seed` (viti:install writes it). This
+        // entry comes after decoy_routes, so its /.env decoy wins. Without a
+        // seed it does nothing. `db_host` is the bait's DB_HOST: point it at
+        // a decoy database host to catch anyone who tries the credentials.
+        // Null: a plausible local address.
+        'bait_files' => [
+            'class' => BaitFiles::class,
+            'enabled' => true,
+            'seed' => env('VITI_BAIT_SEED'),
+            'db_host' => env('VITI_BAIT_DB_HOST'),
+        ],
+
+        // A per-site path (viti:install writes it) that only someone reading
+        // your HTML source or robots.txt would find. Put @viti in a layout to
+        // plant an HTML comment that points at it, worded per site from the
+        // seed; viti:install prints the robots.txt lines.
+        'breadcrumbs' => [
+            'class' => Breadcrumbs::class,
+            'enabled' => true,
+            'path' => env('VITI_BREADCRUMB_PATH'),
+            'seed' => env('VITI_BAIT_SEED'),
         ],
 
     ],

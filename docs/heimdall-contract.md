@@ -65,7 +65,7 @@ Mode `1733` lets any local user (each site's PHP-FPM user) create files without 
 |---|---|
 | `site` | `VITI_SITE`, or `APP_URL`'s host. A label, not proof: the hub trusts only the server the collector authenticated. |
 | `root` | `base_path()`. The hub matches it to a site it inventories. With release directories it's the release path, so match on the site's root as a prefix. |
-| `tripwire` | The tripwire's name, built in (`decoy_routes`, ...) or the app's own. `test` comes from `viti:test`. |
+| `tripwire` | The tripwire's name, built in (`decoy_routes`, `bait_files`, `breadcrumbs`) or the app's own. `test` comes from `viti:test`. |
 | `token` | Which trap in that tripwire: a decoy path, a bait name. Group alerts by `tripwire` + `token`. |
 | `severity` | `noise`, `low`, `high` or `critical`. Any trip by a signed-in user is `critical`. |
 | `request` | `null` when the trip didn't come from a web request (a queue job, an Artisan command). |
@@ -74,6 +74,7 @@ Mode `1733` lets any local user (each site's PHP-FPM user) create files without 
 | `request.query_keys` | Names only, never values. |
 | `actor.user_id` | A string. Never a name or email. |
 | `context` | The tripwire's own detail: up to 20 snake_case keys, with scalars or lists of scalars as values. |
+| `context.bait_fingerprint` | On every `bait_files` trip: the sha256 (hex) of the bait `DB_PASSWORD`. It names the site's bait set without revealing it, and changes when `VITI_BAIT_SEED` rotates. A decoy database host can hash a password it's offered and match it back to the site that leaked it. |
 
 There's never a request body, a cookie, an `Authorization` header or a query value in a trip.
 

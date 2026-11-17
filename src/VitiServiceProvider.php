@@ -4,6 +4,7 @@ namespace Realmwatch\Viti;
 
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Support\ServiceProvider;
+use Realmwatch\Viti\Console\InstallCommand;
 use Realmwatch\Viti\Console\ListCommand;
 use Realmwatch\Viti\Console\TestCommand;
 use Realmwatch\Viti\Http\DetectDecoys;
@@ -22,8 +23,12 @@ final class VitiServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config/viti.php' => config_path('viti.php')], 'viti-config');
-            $this->commands([TestCommand::class, ListCommand::class]);
+            $this->commands([InstallCommand::class, TestCommand::class, ListCommand::class]);
         }
+
+        // @viti renders nothing unless the breadcrumbs tripwire replaces it,
+        // so a disabled Viti never prints the directive's name into a page.
+        $this->callAfterResolving('blade.compiler', fn ($blade) => $blade->directive('viti', fn () => ''));
 
         if (! $this->app['config']->get('viti.enabled')) {
             return;

@@ -15,6 +15,7 @@ use Closure;
  * $token is what Heimdall groups hits by (null: the path). $respond, when
  * set, is called as fn (Request $request, Response $notFound): Response
  * and its response is sent instead of the app's own 404, for bait content.
+ * $context goes into the trip (scalars only, never personal data).
  */
 final readonly class Decoy
 {
@@ -24,6 +25,8 @@ final readonly class Decoy
         public Severity $severity = Severity::Noise,
         public ?string $token = null,
         public ?Closure $respond = null,
+        /** @var array<string, mixed> */
+        public array $context = [],
     ) {}
 
     public function token(): string
