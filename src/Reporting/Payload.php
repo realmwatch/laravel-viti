@@ -21,14 +21,15 @@ final class Payload
     /** Single-line JSON, schema first, as the collector expects it. Bad UTF-8 is replaced, never fatal. */
     public const JSON_FLAGS = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR;
 
+    /** The request headers a report may carry. */
+    public const HEADERS = ['accept', 'accept-language', 'referer', 'user-agent'];
+
     /**
-     * The request headers a report may carry. Not every cf-* header:
+     * Added only when viti.cloudflare is on: from anywhere else they're
+     * just headers a client can forge. Not every cf-* header:
      * Cf-Access-Jwt-Assertion is a credential.
      */
-    public const HEADERS = [
-        'accept', 'accept-language', 'referer', 'user-agent',
-        'cf-connecting-ip', 'cf-ray', 'cf-ipcountry', 'cf-visitor',
-    ];
+    public const CLOUDFLARE_HEADERS = ['cf-connecting-ip', 'cf-ray', 'cf-ipcountry', 'cf-visitor'];
 
     /**
      * @param  array<string, mixed>  $context  the tripwire's own details: scalars or lists of scalars only
@@ -44,6 +45,7 @@ final class Payload
         string $site,
         string $root,
         string $version,
+        bool $cloudflare = false,
     ): array {
         $payload = [
             'schema' => self::SCHEMA,
@@ -54,7 +56,7 @@ final class Payload
             'token' => self::clip($token, 255),
             'severity' => $severity->value,
             'occurred_at' => gmdate('Y-m-d\TH:i:s\Z'),
-            'request' => $request ? self::request($request) : null,
+            'request' => $request ? self::request($request, $cloudflare) : null,
             'actor' => [
                 'authenticated' => $userId !== null,
                 'user_id' => $userId === null ? null : self::clip((string) $userId, 64),
@@ -96,10 +98,10 @@ final class Payload
     }
 
     /** @return array<string, mixed> */
-    private static function request(Request $request): array
+    private static function request(Request $request, bool $cloudflare): array
     {
         $headers = [];
-        foreach (self::HEADERS as $name) {
+        foreach ($cloudflare ? [...self::HEADERS, ...self::CLOUDFLARE_HEADERS] : self::HEADERS as $name) {
             $value = $request->headers->get($name);
             if ($value === null || $value === '') {
                 continue;

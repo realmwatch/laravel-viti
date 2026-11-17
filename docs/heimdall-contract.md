@@ -75,15 +75,18 @@ The collector deletes any file that breaks these rules.
 |---|---|
 | `site` | `VITI_SITE`, or `APP_URL`'s host. A label, not proof: the hub trusts only the server the collector authenticated. |
 | `root` | `base_path()`. The hub matches it to a site it inventories. With release directories it's the release path, so match on the site's root as a prefix. |
-| `tripwire` | snake_case, at most 64 characters, or the hub rejects the trip. The tripwire's name, built in (`decoy_routes`, `bait_files`, `breadcrumbs`) or the app's own. `test` comes from `viti:test`. |
+| `tripwire` | snake_case, at most 64 characters, or the hub rejects the trip. The tripwire's name, built in (`decoy_routes`, `bait_files`, `breadcrumbs`, `honey_user`, `honey_token`, `mass_assignment`, `honey_contact`) or the app's own. `test` comes from `viti:test`. |
 | `token` | Which trap in that tripwire: a decoy path, a bait name. Group alerts by `tripwire` + `token`. |
 | `severity` | `noise`, `low`, `high` or `critical`. Any trip by a signed-in user is `critical`. |
 | `request` | `null` when the trip didn't come from a web request (a queue job, an Artisan command). |
 | `request.ip` | Laravel's `$request->ip()`, so it's only as good as the app's trusted proxies. `cf-connecting-ip` is just a header: trust it only if the server accepts traffic from Cloudflare alone. |
-| `request.headers` | Only `accept`, `accept-language`, `referer` (without its query string), `user-agent`, `cf-connecting-ip`, `cf-ray`, `cf-ipcountry` and `cf-visitor`. Never cookies or credentials. |
+| `request.headers` | Only `accept`, `accept-language`, `referer` (without its query string) and `user-agent`, plus `cf-connecting-ip`, `cf-ray`, `cf-ipcountry` and `cf-visitor` when the site sets `VITI_CLOUDFLARE=true`. Never cookies or credentials. |
 | `request.query_keys` | Names only, never values. |
 | `actor.user_id` | A string. Never a name or email. |
 | `context` | The tripwire's own detail: up to 20 snake_case keys, with scalars or lists of scalars as values. |
+| `context.guard` | On `honey_user` trips: the auth guard's name (`web`, ...). |
+| `context.keys` | On `mass_assignment` trips: the bait field names found, never their values. |
+| `context.model`, `.notification`, `.channel` | On `honey_contact` trips from a notification: class names and the channel. |
 | `context.bait_fingerprint` | On every `bait_files` trip: the sha256 (hex) of the bait `DB_PASSWORD`. It names the site's bait set without revealing it, and changes when `VITI_BAIT_SEED` rotates. A decoy database host can hash a password it's offered and match it back to the site that leaked it. |
 
 There's never a request body, a cookie, an `Authorization` header or a query value in a trip.

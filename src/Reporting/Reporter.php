@@ -55,7 +55,7 @@ final class Reporter
                 return Outcome::Throttled;
             }
             $payload = Payload::make($tripwire, $token, $severity, $context, $request, $userId,
-                $this->site(), $this->app->basePath(), $this->version());
+                $this->site(), $this->app->basePath(), $this->version(), (bool) $this->app['config']->get('viti.cloudflare'));
         } catch (Throwable $e) {
             $this->warn('viti: could not build a trip report', ['tripwire' => $tripwire, 'error' => $e->getMessage()]);
 

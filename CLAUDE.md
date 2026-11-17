@@ -4,7 +4,7 @@ Laravel package (`realmwatch/laravel-viti`, namespace `Realmwatch\Viti`): tripwi
 
 ## Architecture (keep it this small)
 
-- `Viti` is the registry and the only entry point: `trip()`, `decoy()`, `decoys()`, `extend()`, `reportUsing()`.
+- `Viti` is the registry and the only entry point: `trip()`, `decoy()`, `decoys()`, `extend()`, `reportUsing()`, plus `honey()` and `isHoney()` for fake records.
 - A tripwire implements `Contracts\Tripwire::register(Viti $viti, array $options)` and wires itself up with those same calls, plus Laravel events, listeners and middleware. Built-in tripwires get no private API: an app's own tripwire must be able to do anything theirs can.
 - Decoys trip from the global `Http\DetectDecoys` middleware, and only on a response that's already a 404. That's why there's no route registration and no collision check.
 - `Reporting\Reporter`: escalate (signed in → critical) → throttle (`Cache::add`) → `Reporting\Payload` (redaction by allowlist) → transport → the `TripwireTriggered` event. It never throws.
