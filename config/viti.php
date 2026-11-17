@@ -3,6 +3,9 @@
 use Realmwatch\Viti\Tripwires\BaitFiles;
 use Realmwatch\Viti\Tripwires\Breadcrumbs;
 use Realmwatch\Viti\Tripwires\DecoyRoutes;
+use Realmwatch\Viti\Tripwires\HoneyToken;
+use Realmwatch\Viti\Tripwires\HoneyUser;
+use Realmwatch\Viti\Tripwires\MassAssignment;
 
 return [
 
@@ -21,6 +24,12 @@ return [
     'transport' => env('VITI_TRANSPORT', 'spool'),
 
     'spool_path' => env('VITI_SPOOL', '/var/lib/heimdall-viti'),
+
+    // Report Cloudflare's cf-connecting-ip, cf-ray, cf-ipcountry and
+    // cf-visitor headers. Turn it on only if the server accepts traffic
+    // from Cloudflare alone: otherwise anyone can forge them. The reported
+    // IP is always Laravel's $request->ip() (set up trusted proxies for it).
+    'cloudflare' => env('VITI_CLOUDFLARE', false),
 
     // Trips that can't be delivered, and Viti's own errors, are logged here
     // at warning. Null: the default channel. Viti never throws into a request.
@@ -65,6 +74,36 @@ return [
             'enabled' => true,
             'path' => env('VITI_BREADCRUMB_PATH'),
             'seed' => env('VITI_BAIT_SEED'),
+        ],
+
+        // A fake account (viti:seed creates it). Any login attempt with its
+        // email is critical. It's hidden from every query on `model` (null:
+        // the auth provider's), and mail or notifications to it are
+        // cancelled and trip high. Guard your own side effects with
+        // Viti::isHoney($user).
+        'honey_user' => [
+            'class' => HoneyUser::class,
+            'enabled' => true,
+            'email' => env('VITI_HONEY_EMAIL'),
+            'id' => env('VITI_HONEY_USER_ID'),
+            'model' => null,
+        ],
+
+        // A fake API token (viti:seed prints it once, and keeps only its
+        // sha256 here). Presenting it as a bearer token is critical.
+        'honey_token' => [
+            'class' => HoneyToken::class,
+            'enabled' => true,
+            'hash' => env('VITI_HONEY_TOKEN_HASH'),
+        ],
+
+        // Input fields only a mass-assignment probe sends. Opt-in: add the
+        // "viti.bait" middleware to a route group, and ->withoutViti() to a
+        // route that legitimately takes one (an admin form setting "role").
+        'mass_assignment' => [
+            'class' => MassAssignment::class,
+            'enabled' => true,
+            'keys' => MassAssignment::DEFAULT_KEYS,
         ],
 
     ],

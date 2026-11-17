@@ -3,10 +3,13 @@
 namespace Realmwatch\Viti;
 
 use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Routing\Route;
 use Illuminate\Support\ServiceProvider;
 use Realmwatch\Viti\Console\InstallCommand;
 use Realmwatch\Viti\Console\ListCommand;
+use Realmwatch\Viti\Console\SeedCommand;
 use Realmwatch\Viti\Console\TestCommand;
+use Realmwatch\Viti\Http\DetectBaitKeys;
 use Realmwatch\Viti\Http\DetectDecoys;
 use Realmwatch\Viti\Reporting\Reporter;
 
@@ -23,7 +26,16 @@ final class VitiServiceProvider extends ServiceProvider
     {
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config/viti.php' => config_path('viti.php')], 'viti-config');
-            $this->commands([InstallCommand::class, TestCommand::class, ListCommand::class]);
+            $this->commands([InstallCommand::class, SeedCommand::class, TestCommand::class, ListCommand::class]);
+        }
+
+        // Routes may use these whether Viti is on or off, so they always exist.
+        $this->callAfterResolving('router', fn ($router) => $router->aliasMiddleware('viti.bait', DetectBaitKeys::class));
+        if (! Route::hasMacro('withoutViti')) {
+            Route::macro('withoutViti', function () {
+                /** @var Route $this */
+                return $this->withoutMiddleware('viti.bait');
+            });
         }
 
         // @viti renders nothing unless the breadcrumbs tripwire replaces it,

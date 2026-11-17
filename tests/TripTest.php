@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Auth\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Realmwatch\Viti\Facades\Viti;
@@ -9,10 +10,9 @@ use Realmwatch\Viti\Reporting\Reporter;
 use Realmwatch\Viti\Severity;
 use Realmwatch\Viti\Transports\SpoolTransport;
 
-it('never reports cookies, credentials, query values or the body', function () {
+it('never reports cookies, credentials, query values, the body, or unvouched cf-* headers', function () {
     Route::post('/bait', fn () => Viti::trip('mass_assignment', Severity::High, context: ['keys' => ['is_admin']]));
-
-    $this->withHeaders([
+    $send = fn () => $this->withHeaders([
         'Authorization' => 'Bearer secret-bearer',
         'Cookie' => 'session=secret-cookie',
         'Cf-Access-Jwt-Assertion' => 'secret-jwt',
@@ -20,7 +20,13 @@ it('never reports cookies, credentials, query values or the body', function () {
         'CF-Ray' => '8e1f00aa',
     ])->post('/bait?token=secret-query', ['password' => 'secret-body']);
 
-    [$trip] = trips();
+    $send();
+    expect((array) trips()[0]['request']['headers'])->not->toHaveKey('cf-ray');
+
+    config(['viti.cloudflare' => true]);
+    Cache::flush();
+    $send();
+    [, $trip] = trips();
     $json = json_encode($trip);
     expect($json)->not->toContain('secret-')
         ->and($trip['request']['query_keys'])->toBe(['token'])

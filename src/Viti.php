@@ -4,7 +4,10 @@ namespace Realmwatch\Viti;
 
 use Closure;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\Events\NotificationSending;
 use Realmwatch\Viti\Contracts\Transport;
 use Realmwatch\Viti\Contracts\Tripwire;
 use Realmwatch\Viti\Reporting\Reporter;
@@ -18,6 +21,8 @@ use Throwable;
  *   Viti::decoy('/api/v0/debug/users');                       // a path
  *   Viti::decoys(fn () => ['/old-admin', '/backup/*']);       // paths, worked out on first use
  *   Viti::extend('my_tripwire', MyTripwire::class, $options); // a whole tripwire
+ *   Viti::honey(User::class, [$id]);                          // a fake record, hidden
+ *   Viti::isHoney($order);                                    // guard a side effect
  */
 final class Viti
 {
@@ -32,6 +37,9 @@ final class Viti
 
     /** @var array<string, string> tripwire name => what registered it */
     private array $tripwires = [];
+
+    /** @var array<class-string<Model>, list<string>> honey model => its keys */
+    private array $honey = [];
 
     public function __construct(
         private readonly Application $app,
@@ -111,6 +119,54 @@ final class Viti
         return $this;
     }
 
+    /**
+     * Mark fake records of $model, so they never reach a real workflow:
+     * every query on the model leaves them out (a global scope, which also
+     * covers soft-deleted rows an admin could restore), and a notification
+     * to one is cancelled and trips high. Guard your own side effects
+     * (shipping, charging) with isHoney().
+     *
+     * @param  class-string<Model>  $model
+     * @param  list<int|string>  $keys
+     */
+    public function honey(string $model, array $keys): self
+    {
+        $keys = array_values(array_filter(array_map('strval', $keys), fn ($k) => $k !== ''));
+        if ($keys === []) {
+            return $this;
+        }
+        try {
+            if ($this->honey === []) {
+                $this->app['events']->listen(NotificationSending::class, fn (NotificationSending $e) => $this->cancelNotification($e));
+            }
+            $this->honey[$model] = array_values(array_unique([...$this->honey[$model] ?? [], ...$keys]));
+            $hidden = $this->honey[$model];
+            $scope = fn () => $model::addGlobalScope('viti_honey', fn (Builder $query) => $query->whereKeyNot($hidden));
+            $scope();
+            // Booting a model again (tests, Octane) clears its global scopes.
+            $this->app['events']->listen("eloquent.booted: {$model}", $scope);
+        } catch (Throwable $e) {
+            $this->reporter->warn('viti: could not hide honey records', ['model' => $model, 'error' => $e->getMessage()]);
+        }
+
+        return $this;
+    }
+
+    /** Whether $model is a fake record marked with honey(). */
+    public function isHoney(mixed $model): bool
+    {
+        if (! $model instanceof Model) {
+            return false;
+        }
+        foreach ($this->honey as $class => $keys) {
+            if ($model instanceof $class && in_array((string) $model->getKey(), $keys, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** The decoy this request's path matches, if any. */
     public function decoyFor(Request $request): ?Decoy
     {
@@ -145,6 +201,26 @@ final class Viti
     public function reporter(): Reporter
     {
         return $this->reporter;
+    }
+
+    private function cancelNotification(NotificationSending $event): ?bool
+    {
+        try {
+            if (! $this->isHoney($event->notifiable)) {
+                return null;
+            }
+            $this->trip('honey_contact', Severity::High, 'notification', [
+                'model' => $event->notifiable::class,
+                'notification' => $event->notification::class,
+                'channel' => (string) $event->channel,
+            ]);
+
+            return false;
+        } catch (Throwable $e) {
+            $this->reporter->warn('viti: honey notification check failed', ['error' => $e->getMessage()]);
+
+            return null;
+        }
     }
 
     private function resolveProviders(): void
