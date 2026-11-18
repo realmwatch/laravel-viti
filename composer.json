@@ -1,6 +1,6 @@
 {
     "name": "realmwatch/laravel-viti",
-    "description": "Tripwires for Laravel apps: decoys and honey credentials that report every trip to Heimdall.",
+    "description": "Laravel Tripwires: decoys, bait, honeypots that report to Heimdall",
     "keywords": ["laravel", "security", "canary", "honeypot", "tripwire", "heimdall"],
     "license": "MIT",
     "type": "library",
